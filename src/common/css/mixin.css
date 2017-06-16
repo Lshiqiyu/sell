@@ -1,0 +1,3 @@
+.border-none > :after {
+  border-top: none;
+}
