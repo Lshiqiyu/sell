@@ -2,7 +2,8 @@
   <div class="goods">
     <div class="menu-wrapper" ref="menuWrapper">
       <ul>
-        <li v-for="item in goods" class="menu-item">
+        <li v-for="(item,index) in goods" class="menu-item" :class="{'current':currentIndex===index}"
+            @click="selectMenu(index,$event)">
           <span class="text border-1px"><span v-show="item.type>0" class="icon"
                                               :class="classMap[item.type]"></span>{{item.name}}</span>
         </li>
@@ -10,10 +11,10 @@
     </div>
     <div class="foods-wrapper" ref="foodsWrapper">
       <ul>
-        <li v-for="item in goods" class="food-list">
+        <li v-for="item in goods" class="food-list food-list-hook">
           <h1 class="title">{{item.name}}</h1>
           <ul>
-            <li v-for="food in item.foods" class="food-item">
+            <li @click="selecttFood(food,$event)" v-for="food in item.foods" class="food-item">
               <div class="icon">
                 <img :src="food.icon" alt="" width="57" height="57">
               </div>
@@ -26,7 +27,10 @@
                 </div>
                 <div class="price">
                   <span class="now">￥{{food.price}}</span>
-                  <span class="old" v-show="food.oldPrice">{{food.oldPrice}}</span>
+                  <span class="old" v-show="food.oldPrice">￥{{food.oldPrice}}</span>
+                </div>
+                <div class="carcontrol-wrapper">
+                  <car-control @cartAdd="addFood" :food="food"></car-control>
                 </div>
               </div>
             </li>
@@ -34,10 +38,16 @@
         </li>
       </ul>
     </div>
+    <shop-cart ref="shopcart" :deliveryPrice="seller.deliveryPrice" :minPrice="seller.minPrice"
+               :selectFoods="selectFoods"></shop-cart>
+    <food :food="selectedFoods" ref="food"></food>
   </div>
 </template>
 <script>
   import Bscroll from 'better-scroll'
+  import ShopCart from '.././shopcart/shopcart.vue'
+  import CarControl from '.././carcontrol/carcontrol.vue'
+  import food from '../food.vue'
   export default{
     props: {
       seller: {
@@ -46,9 +56,16 @@
     },
     data () {
       return {
-        goods: []
-
+        goods: [],
+        listHeight: [],
+        scrollY: 0,
+        selectedFoods: {}
       }
+    },
+    components: {
+      ShopCart,
+      CarControl,
+      food
     },
     created () {
       this.classMap = ['decrease', 'discount', 'special', 'invoice', 'guarantee']
@@ -56,16 +73,74 @@
         this.goods = res.data.data
         this.$nextTick(() => {
           this._initScroll()
+          this._calculateHeight()
         })
       })
     },
+    computed: {
+      currentIndex () {
+        for (let i = 0; i < this.listHeight.length; i++) {
+          let height1 = this.listHeight[i]
+          let height2 = this.listHeight[i + 1]
+          if (!height2 || (this.scrollY >= height1 && this.scrollY < height2)) {
+            return i
+          }
+        }
+        return 0
+      },
+      selectFoods () {
+        let foods = []
+        this.goods.forEach((good) => {
+          good.foods.forEach((food) => {
+            if (food.count) {
+              foods.push(food)
+            }
+          })
+        })
+        return foods
+      }
+    },
     methods: {
+      selectMenu (index, event) {
+        let foodList = this.$refs.foodsWrapper.getElementsByClassName('food-list-hook')
+        let el = foodList[index]
+        this.foodsScroll.scrollToElement(el, 300)
+      },
+      _drop (target) {
+        this.$refs.shopcart.drop(target)
+      },
+      addFood (target) {
+        this._drop(target)
+      },
       _initScroll () {
-        this.menuScroll = new Bscroll(this.$refs.menuWrapper, {})
-        this.foodsScroll = new Bscroll(this.$refs.foodsWrapper, {})
+        this.menuScroll = new Bscroll(this.$refs.menuWrapper, {
+          click: true
+        })
+        this.foodsScroll = new Bscroll(this.$refs.foodsWrapper, {
+          probeType: 3,
+          click: true
+        })
+        this.foodsScroll.on('scroll', (pos) => {
+          this.scrollY = Math.abs(Math.round(pos.y))
+        })
       },
       _calculateHeight () {
-
+        let foodList = this.$refs.foodsWrapper.getElementsByClassName('food-list-hook')
+        let height = 0
+        this.listHeight.push(height)
+        for (let i = 0; i < foodList.length; i++) {
+          let item = foodList[i]
+          height += item.clientHeight
+          this.listHeight.push(height)
+        }
+      },
+      selecttFood (food, event) {
+//        if (!event._construcred) {
+//          return
+//        }
+        this.selectedFoods = food
+        console.log(this.$refs.food)
+        this.$refs.food.show()
       }
     }
   }
@@ -85,12 +160,24 @@
       width: 80px;
       background: #f3f5f7;
       & > ul {
+        & > .current {
+          position: relative;
+          z-index: 10;
+          margin-top: -1px;
+          background: #fff;
+          color: #000000;
+          font-weight: 700;
+          .border-none();
+          & > .text {
+          }
+        }
         & > .menu-item {
+          box-sizing: border-box;
           display: table;
-          width: 56px;
+          width: 80px;
           height: 54px;
           line-height: 14px;
-          margin: 0 12px;
+          padding: 0 12px;
           .border-1px(rgba(7, 17, 27, 0.2));
 
           & > .text {
@@ -98,6 +185,7 @@
             font-size: 12px;
             width: 56px;
             vertical-align: middle;
+            text-align: center;
 
             & > .icon {
               display: inline-block;
@@ -124,6 +212,9 @@
               .bg-image('../.././assets/special_1')
             }
           }
+        }
+        & > :last-child {
+          .border-none();
         }
       }
     }
@@ -184,8 +275,13 @@
                   & > .old {
                     text-decoration: line-through;
                     font-size: 10px;
-                    color:;
+                    color: rgb(7, 17, 27);
                   }
+                }
+                & > .carcontrol-wrapper {
+                  position: absolute;
+                  right: 0;
+                  bottom: 12px;
                 }
               }
 
